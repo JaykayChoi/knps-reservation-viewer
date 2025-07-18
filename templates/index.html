@@ -24,7 +24,7 @@
 </head>
 <body>
   <h1>예약 가능한 특화야영장/카라반</h1>
-  <div id="list">불러오는 중...</div>
+  <div id="list"><h2>불러오는 중...</h2></div>
 
   <!-- ✅ 예약 페이지 링크 추가 -->
   <div class="footer-link">
@@ -36,7 +36,6 @@
 
   <script>
     function formatDisplayDate(dateStr) {
-      // 20250719 → 2025-07-19
       return `${dateStr.slice(0,4)}-${dateStr.slice(4,6)}-${dateStr.slice(6,8)}`;
     }
 
@@ -47,11 +46,10 @@
         list.innerHTML = '';
 
         if (data.length === 0) {
-          list.innerText = '예약 가능한 항목이 없습니다.';
+          list.innerHTML = '<h2>예약 가능한 항목이 없습니다.</h2>';
           return;
         }
 
-        // 날짜별로 그룹화
         const grouped = {};
         data.forEach(item => {
           const date = item.query_date;
@@ -59,13 +57,12 @@
           grouped[date].push(item);
         });
 
-        // 날짜 오름차순 정렬
         Object.keys(grouped).sort().forEach(date => {
           const section = document.createElement('div');
           const formattedDate = formatDisplayDate(date);
           section.innerHTML = `<div class="date-label">📅 ${formattedDate}</div>`;
 
-          grouped[date].forEach((item, i) => {
+          grouped[date].forEach(item => {
             const div = document.createElement("div");
             div.className = "item";
             div.innerHTML = `
@@ -79,7 +76,7 @@
         });
       })
       .catch(err => {
-        document.getElementById('list').innerText = '데이터를 불러오는 데 실패했습니다.';
+        document.getElementById('list').innerHTML = '<h2>데이터를 불러오는 데 실패했습니다.</h2>';
         console.error(err);
       });
   </script>
