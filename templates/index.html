@@ -6,56 +6,61 @@
   <style>
     body { font-family: sans-serif; padding: 1rem; }
     .item { margin-bottom: 1em; padding: 0.5em; border: 1px solid #ccc; border-radius: 6px; }
-    .date-input { margin-bottom: 1rem; }
+    .date-label { font-weight: bold; margin-top: 2em; font-size: 1.2em; }
   </style>
 </head>
 <body>
   <h1>예약 가능한 특화야영장/카라반</h1>
-  <div class="date-input">
-    날짜: <input type="date" id="dateInput" value="2025-07-19">
-    <button onclick="loadData()">조회</button>
-  </div>
-  <div id="list">조회 중...</div>
+  <div id="list">불러오는 중...</div>
 
   <script>
-    function formatDate(d) {
-      const yyyy = d.getFullYear();
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const dd = String(d.getDate()).padStart(2, '0');
-      return `${yyyy}${mm}${dd}`;
+    function formatDisplayDate(dateStr) {
+      // 20250719 → 2025-07-19
+      return `${dateStr.slice(0,4)}-${dateStr.slice(4,6)}-${dateStr.slice(6,8)}`;
     }
 
-    function loadData() {
-      const input = document.getElementById("dateInput");
-      const date = input.value.replaceAll("-", "");
-      const list = document.getElementById("list");
-      list.innerText = "불러오는 중...";
+    fetch('/api/reservations')
+      .then(res => res.json())
+      .then(data => {
+        const list = document.getElementById('list');
+        list.innerHTML = '';
 
-      fetch(`/api/reservations?date=${date}`)
-        .then(res => res.json())
-        .then(data => {
-          list.innerHTML = '';
-          if (data.length === 0) {
-            list.innerText = "예약 가능한 특화야영장/카라반이 없습니다.";
-            return;
-          }
-          data.forEach((item, i) => {
+        if (data.length === 0) {
+          list.innerText = '예약 가능한 항목이 없습니다.';
+          return;
+        }
+
+        // 날짜별로 그룹화
+        const grouped = {};
+        data.forEach(item => {
+          const date = item.query_date;
+          if (!grouped[date]) grouped[date] = [];
+          grouped[date].push(item);
+        });
+
+        // 날짜 오름차순 정렬
+        Object.keys(grouped).sort().forEach(date => {
+          const section = document.createElement('div');
+          const formattedDate = formatDisplayDate(date);
+          section.innerHTML = `<div class="date-label">📅 ${formattedDate}</div>`;
+
+          grouped[date].forEach((item, i) => {
             const div = document.createElement("div");
             div.className = "item";
             div.innerHTML = `
-              <strong>${i+1}. ${item.officeNm} - ${item.deptNm} - ${item.prdCtgNm}</strong><br>
+              <strong>${item.officeNm} - ${item.deptNm} - ${item.prdCtgNm}</strong><br>
               전체: ${item.prdIdCnt} / 예약 가능: ${item.cntN} / 완료: ${item.cntC} / 당일: ${item.cntR}
             `;
-            list.appendChild(div);
+            section.appendChild(div);
           });
-        })
-        .catch(err => {
-          list.innerText = "데이터를 불러오는 데 실패했습니다.";
-          console.error(err);
-        });
-    }
 
-    window.onload = loadData;
+          list.appendChild(section);
+        });
+      })
+      .catch(err => {
+        document.getElementById('list').innerText = '데이터를 불러오는 데 실패했습니다.';
+        console.error(err);
+      });
   </script>
 </body>
 </html>
