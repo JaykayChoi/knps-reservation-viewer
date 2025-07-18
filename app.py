@@ -3,6 +3,8 @@ import requests
 import datetime
 import os
 
+# https://chatgpt.com/c/6879d68b-0568-8007-9fa0-1bf3f5c05cb4
+
 app = Flask(__name__)
 
 @app.route("/")
@@ -43,7 +45,9 @@ def reservations():
             filtered = [
                 {**item, "query_date": date}  # 날짜도 함께 반환
                 for item in result.get("list", [])
-                if item["prdCtgNm"] in ("특화야영장", "카라반") and item["cntN"] > 0
+                if item["prdCtgNm"] in ("특화야영장", "카라반")
+                and item["cntN"] > 0
+                and item["officeNm"] not in ("북한산", "한려해상")  # 제외할 공원
             ]
 
             filtered_results.extend(filtered)
