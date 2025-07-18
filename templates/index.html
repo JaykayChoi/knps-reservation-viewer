@@ -7,11 +7,32 @@
     body { font-family: sans-serif; padding: 1rem; }
     .item { margin-bottom: 1em; padding: 0.5em; border: 1px solid #ccc; border-radius: 6px; }
     .date-label { font-weight: bold; margin-top: 2em; font-size: 1.2em; }
+    .footer-link {
+      margin-top: 3em;
+      text-align: center;
+      font-size: 1.1em;
+    }
+    .footer-link a {
+      text-decoration: none;
+      font-weight: bold;
+      color: #2c3e50;
+    }
+    .footer-link a:hover {
+      text-decoration: underline;
+    }
   </style>
 </head>
 <body>
   <h1>예약 가능한 특화야영장/카라반</h1>
   <div id="list">불러오는 중...</div>
+
+  <!-- ✅ 예약 페이지 링크 추가 -->
+  <div class="footer-link">
+    <a href="https://reservation.knps.or.kr/reservation/searchSimpleCampReservation.do"
+       target="_blank" rel="noopener noreferrer">
+      👉 국립공원 예약 페이지 바로가기
+    </a>
+  </div>
 
   <script>
     function formatDisplayDate(dateStr) {
