@@ -47,7 +47,7 @@ def reservations():
                 for item in result.get("list", [])
                 if item["prdCtgNm"] in ("특화야영장", "카라반")
                 and item["cntN"] > 0
-                and item["officeNm"] not in ("북한산", "한려해상", "다도해해상")  # 제외할 공원
+                and item["officeNm"] not in ("북한산", "한려해상", "다도해해상", "지리산경남", "무등산동부")  # 제외할 공원
             ]
 
             filtered_results.extend(filtered)
