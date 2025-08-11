@@ -5,28 +5,33 @@
   <title>예약 가능한 특화야영장/카라반</title>
   <style>
     body { font-family: sans-serif; padding: 1rem; }
+    .controls { display:flex; align-items:center; gap:1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+    .check-group { display:flex; gap:0.75rem; align-items:center; }
     .item { margin-bottom: 1em; padding: 0.5em; border: 1px solid #ccc; border-radius: 6px; }
     .date-label { font-weight: bold; margin-top: 2em; font-size: 1.2em; }
-    .footer-link {
-      margin-top: 3em;
-      text-align: center;
-      font-size: 1.1em;
-    }
-    .footer-link a {
-      text-decoration: none;
-      font-weight: bold;
-      color: #2c3e50;
-    }
-    .footer-link a:hover {
-      text-decoration: underline;
-    }
+    .footer-link { margin-top: 3em; text-align: center; font-size: 1.1em; }
+    .footer-link a { text-decoration: none; font-weight: bold; color: #2c3e50; }
+    .footer-link a:hover { text-decoration: underline; }
+    .muted { color:#666; font-size:0.95em; }
+    button.refresh { padding:0.5rem 0.9rem; border:1px solid #aaa; border-radius:8px; background:#f8f8f8; cursor:pointer; }
+    button.refresh:hover { background:#f0f0f0; }
   </style>
 </head>
 <body>
-  <h1>토요일 예약 가능한 특화야영장/카라반</h1>
+  <h1>예약 가능한 특화야영장/카라반</h1>
+
+  <div class="controls">
+    <div class="check-group">
+      <label><input type="checkbox" class="day-check" value="4"> 금요일</label>
+      <label><input type="checkbox" class="day-check" value="5"> 토요일</label>
+      <label><input type="checkbox" class="day-check" value="6"> 일요일</label>
+    </div>
+    <button id="btn-refresh" class="refresh">데이터 새로고침</button>
+    <span id="selected-label" class="muted"></span>
+  </div>
+
   <div id="list"><h2>불러오는 중...</h2></div>
 
-  <!-- ✅ 예약 페이지 링크 추가 -->
   <div class="footer-link">
     <a href="https://reservation.knps.or.kr/reservation/searchSimpleCampReservation.do"
        target="_blank" rel="noopener noreferrer">
@@ -35,21 +40,64 @@
   </div>
 
   <script>
+    const KEY = 'selectedDays'; // localStorage key
+    const DAY_LABELS = {4:'금요일', 5:'토요일', 6:'일요일'};
+
     function formatDisplayDate(dateStr) {
       return `${dateStr.slice(0,4)}-${dateStr.slice(4,6)}-${dateStr.slice(6,8)}`;
     }
 
-    fetch('/api/reservations')
-      .then(res => res.json())
-      .then(data => {
-        const list = document.getElementById('list');
-        list.innerHTML = '';
+    function getSelectedDays() {
+      const raw = localStorage.getItem(KEY);
+      if (raw) {
+        try {
+          const arr = JSON.parse(raw);
+          if (Array.isArray(arr) && arr.length) return arr.map(Number);
+        } catch {}
+      }
+      // 기본값: 토요일
+      return [5];
+    }
 
-        if (data.length === 0) {
+    function setSelectedDays(days) {
+      localStorage.setItem(KEY, JSON.stringify(days.map(Number)));
+    }
+
+    function applySelectionsToUI(days) {
+      document.querySelectorAll('.day-check').forEach(cb => {
+        cb.checked = days.includes(Number(cb.value));
+      });
+      const label = days.length
+        ? '선택한 요일: ' + days.map(d => DAY_LABELS[d]).join(', ')
+        : '선택한 요일 없음 (기본: 토요일)';
+      document.getElementById('selected-label').textContent = label;
+    }
+
+    function buildDaysQueryParam(days) {
+      // 백엔드에서 Python weekday() 기준: 월=0 ... 일=6
+      // 우리가 사용하는 값 그대로 전송 (금=4, 토=5, 일=6)
+      return days.join(',');
+    }
+
+    async function fetchAndRender() {
+      const days = getSelectedDays();
+      applySelectionsToUI(days);
+
+      const list = document.getElementById('list');
+      list.innerHTML = '<h2>불러오는 중...</h2>';
+
+      const qs = days.length ? `?days=${encodeURIComponent(buildDaysQueryParam(days))}` : '?days=5';
+      try {
+        const res = await fetch(`/api/reservations${qs}`);
+        const data = await res.json();
+
+        list.innerHTML = '';
+        if (!Array.isArray(data) || data.length === 0) {
           list.innerHTML = '<h2>예약 가능한 항목이 없습니다.</h2>';
           return;
         }
 
+        // 날짜별 그룹화
         const grouped = {};
         data.forEach(item => {
           const date = item.query_date;
@@ -74,11 +122,36 @@
 
           list.appendChild(section);
         });
-      })
-      .catch(err => {
-        document.getElementById('list').innerHTML = '<h2>데이터를 불러오는 데 실패했습니다.</h2>';
+      } catch (err) {
         console.error(err);
+        list.innerHTML = '<h2>데이터를 불러오는 데 실패했습니다.</h2>';
+      }
+    }
+
+    // 초기화
+    document.addEventListener('DOMContentLoaded', () => {
+      // 체크박스 이벤트
+      document.querySelectorAll('.day-check').forEach(cb => {
+        cb.addEventListener('change', () => {
+          const selected = Array.from(document.querySelectorAll('.day-check'))
+            .filter(x => x.checked)
+            .map(x => Number(x.value));
+          // 아무것도 선택 안 되어 있으면 기본값(토요일)로
+          const days = selected.length ? selected : [5];
+          setSelectedDays(days);
+          fetchAndRender();
+        });
       });
+
+      // 데이터 새로고침 버튼
+      document.getElementById('btn-refresh').addEventListener('click', () => {
+        fetchAndRender();
+      });
+
+      // 저장된 선택 복원 후 데이터 로드
+      applySelectionsToUI(getSelectedDays());
+      fetchAndRender();
+    });
   </script>
 </body>
 </html>

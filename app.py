@@ -1,9 +1,7 @@
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, request
 import requests
 import datetime
 import os
-
-# https://chatgpt.com/c/6879d68b-0568-8007-9fa0-1bf3f5c05cb4
 
 app = Flask(__name__)
 
@@ -16,18 +14,30 @@ def reservations():
     today = datetime.date.today()
     end_date = today + datetime.timedelta(days=60)
 
-    # ✅ 오늘부터 60일 동안의 모든 토요일 구하기
-    saturdays = [
+    # days 파라미터: Python weekday() 기준 (월=0 ... 일=6)
+    # 기본값: 토요일(5)
+    raw_days = request.args.get("days", "5")
+    try:
+        selected_days = {int(x) for x in raw_days.split(",") if x != ""}
+        selected_days = {d for d in selected_days if 0 <= d <= 6}
+    except Exception:
+        selected_days = {5}
+
+    if not selected_days:
+        selected_days = {5}
+
+    # 조회 대상 날짜 목록 구성
+    target_dates = [
         (today + datetime.timedelta(days=i)).strftime("%Y%m%d")
         for i in range((end_date - today).days + 1)
-        if (today + datetime.timedelta(days=i)).weekday() == 5
+        if (today + datetime.timedelta(days=i)).weekday() in selected_days
     ]
 
-    print(f"조회할 토요일 날짜 목록: {saturdays}")
+    print(f"조회할 날짜({sorted(selected_days)}): {target_dates}")
 
     filtered_results = []
 
-    for date in saturdays:
+    for date in target_dates:
         try:
             url = "https://reservation.knps.or.kr/reservation/selectCampRemainSiteList.do"
             data = {
@@ -39,15 +49,16 @@ def reservations():
                 "X-Requested-With": "XMLHttpRequest"
             }
 
-            resp = requests.post(url, data=data, headers=headers)
+            resp = requests.post(url, data=data, headers=headers, timeout=10)
+            resp.raise_for_status()
             result = resp.json()
 
             filtered = [
-                {**item, "query_date": date}  # 날짜도 함께 반환
+                {**item, "query_date": date}
                 for item in result.get("list", [])
-                if item["prdCtgNm"] in ("특화야영장", "카라반")
-                and item["cntN"] > 0
-                and item["officeNm"] not in ("북한산", "한려해상", "다도해해상", "지리산경남", "무등산동부")  # 제외할 공원
+                if item.get("prdCtgNm") in ("특화야영장", "카라반")
+                and (item.get("cntN") or 0) > 0
+                and item.get("officeNm") not in ("북한산", "한려해상", "다도해해상", "지리산경남", "무등산동부")
             ]
 
             filtered_results.extend(filtered)
