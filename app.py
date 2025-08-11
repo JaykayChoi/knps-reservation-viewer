@@ -14,36 +14,38 @@ def reservations():
     today = datetime.date.today()
     end_date = today + datetime.timedelta(days=60)
 
-    # days 파라미터: Python weekday() 기준 (월=0 ... 일=6)
-    # 기본값: 토요일(5)
+    # 요일 파라미터: Python weekday() 기준 (월=0 ... 일=6). 기본값: 토요일(5)
     raw_days = request.args.get("days", "5")
     try:
         selected_days = {int(x) for x in raw_days.split(",") if x != ""}
         selected_days = {d for d in selected_days if 0 <= d <= 6}
     except Exception:
         selected_days = {5}
-
     if not selected_days:
         selected_days = {5}
 
-    # 조회 대상 날짜 목록 구성
+    # 시설 파라미터: 기본값 둘 다
+    raw_types = request.args.get("types", "특화야영장,카라반")
+    selected_types = {x.strip() for x in raw_types.split(",") if x.strip()}
+    if not selected_types:
+        selected_types = {"특화야영장", "카라반"}
+
+    # 조회 대상 날짜 구성
+    total_days = (end_date - today).days + 1
     target_dates = [
         (today + datetime.timedelta(days=i)).strftime("%Y%m%d")
-        for i in range((end_date - today).days + 1)
+        for i in range(total_days)
         if (today + datetime.timedelta(days=i)).weekday() in selected_days
     ]
 
-    print(f"조회할 날짜({sorted(selected_days)}): {target_dates}")
+    print(f"[API] 요일={sorted(selected_days)}, 시설={sorted(selected_types)} / 조회일자수={len(target_dates)}")
 
     filtered_results = []
 
     for date in target_dates:
         try:
             url = "https://reservation.knps.or.kr/reservation/selectCampRemainSiteList.do"
-            data = {
-                "prd_sal_ymd": date,
-                "park": ""
-            }
+            data = {"prd_sal_ymd": date, "park": ""}
             headers = {
                 "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
                 "X-Requested-With": "XMLHttpRequest"
@@ -56,7 +58,7 @@ def reservations():
             filtered = [
                 {**item, "query_date": date}
                 for item in result.get("list", [])
-                if item.get("prdCtgNm") in ("특화야영장", "카라반")
+                if item.get("prdCtgNm") in selected_types
                 and (item.get("cntN") or 0) > 0
                 and item.get("officeNm") not in ("북한산", "한려해상", "다도해해상", "지리산경남", "무등산동부")
             ]
