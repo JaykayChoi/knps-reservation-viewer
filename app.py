@@ -12,9 +12,17 @@ def home():
 @app.route("/api/reservations")
 def reservations():
     today = datetime.date.today()
-    end_date = today + datetime.timedelta(days=60)
 
-    # 요일 파라미터: Python weekday() 기준 (월=0 ... 일=6). 기본값: 토요일(5)
+    # ✅ 주수 파라미터 (1~10), 기본 8주
+    try:
+        weeks = int(request.args.get("weeks", "8"))
+    except Exception:
+        weeks = 8
+    if weeks < 1 or weeks > 10:
+        weeks = 8
+    total_days = weeks * 7
+
+    # ✅ 요일 파라미터: Python weekday() 기준 (월=0 ... 일=6). 기본값: 토요일(5)
     raw_days = request.args.get("days", "5")
     try:
         selected_days = {int(x) for x in raw_days.split(",") if x != ""}
@@ -24,21 +32,20 @@ def reservations():
     if not selected_days:
         selected_days = {5}
 
-    # 시설 파라미터: 기본값 둘 다
+    # ✅ 시설 파라미터: 기본값 둘 다
     raw_types = request.args.get("types", "특화야영장,카라반")
     selected_types = {x.strip() for x in raw_types.split(",") if x.strip()}
     if not selected_types:
         selected_types = {"특화야영장", "카라반"}
 
-    # 조회 대상 날짜 구성
-    total_days = (end_date - today).days + 1
+    # ✅ 조회 대상 날짜 구성
     target_dates = [
         (today + datetime.timedelta(days=i)).strftime("%Y%m%d")
         for i in range(total_days)
         if (today + datetime.timedelta(days=i)).weekday() in selected_days
     ]
 
-    print(f"[API] 요일={sorted(selected_days)}, 시설={sorted(selected_types)} / 조회일자수={len(target_dates)}")
+    print(f"[API] 주수={weeks}, 요일={sorted(selected_days)}, 시설={sorted(selected_types)} / 조회일자수={len(target_dates)}")
 
     filtered_results = []
 

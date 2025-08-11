@@ -8,8 +8,8 @@
     :root {
       --gap: 1rem;
       --card-radius: 10px;
-      --touch-size: 20px; /* 모바일 터치 타겟 최소 권장 40~44px */
-      --checkbox-scale: 1.15; /* 체크박스 시각적 확대 */
+      --touch-size: 20px;     /* ✅ 절반 크기 */
+      --checkbox-scale: 1.15; /* ✅ 절반 크기 느낌 */
       --text-muted: #666;
       --border: #ccc;
     }
@@ -28,11 +28,9 @@
       .controls { grid-template-columns: 1fr; }
     }
 
-    .check-wrap {
-      display: grid;
-      gap: 0.6rem;
-    }
+    .check-wrap { display: grid; gap: 0.6rem; }
     .group-title { font-weight: 600; margin-bottom: -0.2rem; }
+    .row { display:flex; flex-wrap:wrap; gap: 0.6rem 1rem; align-items:center; }
 
     .check-group {
       display: flex; flex-wrap: wrap; gap: 0.8rem 1.2rem;
@@ -52,10 +50,21 @@
       height: var(--touch-size);
       transform: scale(var(--checkbox-scale));
       transform-origin: left center;
-      /* 일부 브라우저에서 시스템 색을 사용 */
       accent-color: #2c7be5;
     }
     .check span { font-size: 1.05rem; }
+
+    .select {
+      display:flex; align-items:center; gap:0.5rem;
+      font-size: 1rem;
+    }
+    .select select {
+      font-size: 1rem;
+      padding: 0.4rem 0.6rem;
+      border: 1px solid #aaa;
+      border-radius: 8px;
+      background:#fff;
+    }
 
     button.refresh {
       justify-self: start;
@@ -103,11 +112,26 @@
         <label class="check"><input type="checkbox" class="type-check" value="카라반" /><span>카라반</span></label>
       </div>
 
-      <div class="muted" id="selected-label"></div>
-    </div>
+      <div class="row">
+        <div class="select">
+          <label for="weeks-select">조회 범위:</label>
+          <select id="weeks-select">
+            <option value="1">1주</option>
+            <option value="2">2주</option>
+            <option value="3">3주</option>
+            <option value="4">4주</option>
+            <option value="5">5주</option>
+            <option value="6">6주</option>
+            <option value="7">7주</option>
+            <option value="8">8주 (기본)</option>
+            <option value="9">9주</option>
+            <option value="10">10주</option>
+          </select>
+        </div>
+        <button id="btn-refresh" class="refresh">데이터 새로고침</button>
+      </div>
 
-    <div>
-      <button id="btn-refresh" class="refresh">데이터 새로고침</button>
+      <div class="muted" id="selected-label"></div>
     </div>
   </div>
 
@@ -123,8 +147,9 @@
   <script>
     const DAY_KEY = 'selectedDays';
     const TYPE_KEY = 'selectedTypes';
-    const DAY_LABELS = {0:'일',1:'월',2:'화',3:'수',4:'목',5:'금',6:'토'}; // Date.getDay() 기준
-    const PYWDAY_LABELS = {4:'금요일',5:'토요일',6:'일요일'}; // Python weekday() 전송용 라벨
+    const WEEKS_KEY = 'weeksAhead';
+    const DAY_LABELS = {0:'일',1:'월',2:'화',3:'수',4:'목',5:'금',6:'토'}; // Date.getDay()
+    const PYWDAY_LABELS = {4:'금요일',5:'토요일',6:'일요일'};            // Python weekday() 값용 표기
 
     function formatDisplayDate(dateStr) {
       // YYYYMMDD -> YYYY-MM-DD (요일)
@@ -132,7 +157,7 @@
       const m = Number(dateStr.slice(4,6));
       const d = Number(dateStr.slice(6,8));
       const dt = new Date(y, m - 1, d);
-      const week = DAY_LABELS[dt.getDay()]; // 0=일, 6=토
+      const week = DAY_LABELS[dt.getDay()];
       return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')} (${week})`;
     }
 
@@ -165,36 +190,50 @@
       localStorage.setItem(TYPE_KEY, JSON.stringify(types));
     }
 
-    function applySelectionsToUI(days, types) {
+    function getWeeksAhead() {
+      const raw = localStorage.getItem(WEEKS_KEY);
+      const v = Number(raw);
+      if (Number.isInteger(v) && v >= 1 && v <= 10) return v;
+      return 8; // 기본값: 8주
+    }
+    function setWeeksAhead(v) {
+      localStorage.setItem(WEEKS_KEY, String(v));
+    }
+
+    function applySelectionsToUI(days, types, weeks) {
       document.querySelectorAll('.day-check').forEach(cb => {
         cb.checked = days.includes(Number(cb.value));
       });
       document.querySelectorAll('.type-check').forEach(cb => {
         cb.checked = types.includes(cb.value);
       });
+      const sel = document.getElementById('weeks-select');
+      sel.value = String(weeks);
 
       const labelDays = (days.length ? days.map(d => PYWDAY_LABELS[d]).join(', ') : '없음');
       const labelTypes = (types.length ? types.join(', ') : '없음');
       document.getElementById('selected-label').textContent =
-        `선택한 요일: ${labelDays} / 선택한 시설: ${labelTypes}`;
+        `선택한 요일: ${labelDays} / 선택한 시설: ${labelTypes} / 조회 범위: ${weeks}주`;
     }
 
-    function buildQueryParams(days, types) {
+    function buildQueryParams(days, types, weeks) {
       const dayParam = (days.length ? days.join(',') : '5'); // 비었으면 토요일
       const typeParam = (types.length ? types.join(',') : '특화야영장,카라반');
-      return `?days=${encodeURIComponent(dayParam)}&types=${encodeURIComponent(typeParam)}`;
+      const weeksParam = (Number.isInteger(weeks) && weeks >= 1 && weeks <= 10) ? weeks : 8;
+      return `?days=${encodeURIComponent(dayParam)}&types=${encodeURIComponent(typeParam)}&weeks=${weeksParam}`;
     }
 
     async function fetchAndRender() {
       const days = getSelectedDays();
       const types = getSelectedTypes();
-      applySelectionsToUI(days, types);
+      const weeks = getWeeksAhead();
+      applySelectionsToUI(days, types, weeks);
 
       const list = document.getElementById('list');
       list.innerHTML = '<h2>불러오는 중...</h2>';
 
       try {
-        const res = await fetch(`/api/reservations${buildQueryParams(days, types)}`);
+        const res = await fetch(`/api/reservations${buildQueryParams(days, types, weeks)}`);
         const data = await res.json();
 
         list.innerHTML = '';
@@ -258,13 +297,21 @@
         });
       });
 
+      // 주수 선택 드롭다운
+      document.getElementById('weeks-select').addEventListener('change', (e) => {
+        const v = Number(e.target.value);
+        const weeks = (Number.isInteger(v) && v >= 1 && v <= 10) ? v : 8;
+        setWeeksAhead(weeks);
+        fetchAndRender();
+      });
+
       // 데이터 새로고침 버튼
       document.getElementById('btn-refresh').addEventListener('click', () => {
         fetchAndRender();
       });
 
       // 저장된 선택 반영 & 최초 로드
-      applySelectionsToUI(getSelectedDays(), getSelectedTypes());
+      applySelectionsToUI(getSelectedDays(), getSelectedTypes(), getWeeksAhead());
       fetchAndRender();
     });
   </script>
