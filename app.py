@@ -9,6 +9,17 @@ app = Flask(__name__)
 def home():
     return render_template("index.html")
 
+def _parse_date(s: str):
+    """YYYY-MM-DD 또는 YYYY.MM.DD 허용. 잘못되면 None."""
+    if not s:
+        return None
+    for fmt in ("%Y-%m-%d", "%Y.%m.%d"):
+        try:
+            return datetime.datetime.strptime(s.strip(), fmt).date()
+        except Exception:
+            pass
+    return None
+
 @app.route("/api/reservations")
 def reservations():
     today = datetime.date.today()
@@ -38,14 +49,40 @@ def reservations():
     if not selected_types:
         selected_types = {"특화야영장", "카라반"}
 
-    # ✅ 조회 대상 날짜 구성
-    target_dates = [
+    # ✅ 날짜 범위 파라미터 (있으면 ‘추가로’ 포함; 요일/주수와 합집합)
+    start_str = (request.args.get("start_date") or "").strip()
+    end_str   = (request.args.get("end_date") or "").strip()
+    start_date = _parse_date(start_str)
+    end_date   = _parse_date(end_str)
+
+    # ✅ 요일 기반 후보 (오늘부터 weeks*7일 중 선택 요일만)
+    weekday_dates = [
         (today + datetime.timedelta(days=i)).strftime("%Y%m%d")
         for i in range(total_days)
         if (today + datetime.timedelta(days=i)).weekday() in selected_days
     ]
 
-    print(f"[API] 주수={weeks}, 요일={sorted(selected_days)}, 시설={sorted(selected_types)} / 조회일자수={len(target_dates)}")
+    # ✅ 날짜 범위 후보 (양 끝 포함, 과도 방지를 위해 최대 120일)
+    range_dates = []
+    if start_date and end_date and start_date <= end_date:
+        max_span = 120
+        span = (end_date - start_date).days + 1
+        if span > max_span:
+            end_date = start_date + datetime.timedelta(days=max_span - 1)
+            span = max_span
+        range_dates = [
+            (start_date + datetime.timedelta(days=i)).strftime("%Y%m%d")
+            for i in range(span)
+        ]
+
+    # ✅ 최종 타깃: 합집합(중복 제거)
+    target_dates = sorted(set(weekday_dates) | set(range_dates))
+
+    print(
+        f"[API] 주수={weeks}, 요일={sorted(selected_days)}, 시설={sorted(selected_types)} "
+        f"/ 날짜범위={start_date}~{end_date} / (요일 {len(weekday_dates)} + 범위 {len(range_dates)}) "
+        f"→ 조회일자수={len(target_dates)}"
+    )
 
     filtered_results = []
 

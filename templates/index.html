@@ -8,8 +8,8 @@
     :root {
       --gap: 1rem;
       --card-radius: 10px;
-      --touch-size: 20px;     /* ✅ 절반 크기 */
-      --checkbox-scale: 1.15; /* ✅ 절반 크기 느낌 */
+      --touch-size: 20px;
+      --checkbox-scale: 1.15;
       --text-muted: #666;
       --border: #ccc;
     }
@@ -32,11 +32,8 @@
     .group-title { font-weight: 600; margin-bottom: -0.2rem; }
     .row { display:flex; flex-wrap:wrap; gap: 0.6rem 1rem; align-items:center; }
 
-    .check-group {
-      display: flex; flex-wrap: wrap; gap: 0.8rem 1.2rem;
-    }
+    .check-group { display: flex; flex-wrap: wrap; gap: 0.8rem 1.2rem; }
 
-    /* 터치 타겟 넓히기 + 체크박스 크게 */
     .check {
       display: inline-flex;
       align-items: center;
@@ -58,7 +55,7 @@
       display:flex; align-items:center; gap:0.5rem;
       font-size: 1rem;
     }
-    .select select {
+    .select select, .select input[type="date"] {
       font-size: 1rem;
       padding: 0.4rem 0.6rem;
       border: 1px solid #aaa;
@@ -92,6 +89,8 @@
     .footer-link { margin-top: 2rem; text-align: center; font-size: 1.05em; }
     .footer-link a { text-decoration: none; font-weight: bold; color: #2c3e50; }
     .footer-link a:hover { text-decoration: underline; }
+
+    .hint { font-size: 0.9rem; color: #555; }
   </style>
 </head>
 <body>
@@ -128,10 +127,20 @@
             <option value="10">10주</option>
           </select>
         </div>
+
+        <!-- ✅ 추가 날짜 범위 (있으면 요일+주수와 합집합으로 조회) -->
+        <div class="select">
+          <label for="start-date">시작:</label>
+          <input type="date" id="start-date" />
+          <label for="end-date">종료:</label>
+          <input type="date" id="end-date" />
+        </div>
+
         <button id="btn-refresh" class="refresh">데이터 새로고침</button>
       </div>
 
       <div class="muted" id="selected-label"></div>
+      <div class="hint">※ 선택한 요일(금·토·일 등) + 지정한 기간(있다면)을 <b>합집합</b>으로 조회합니다.</div>
     </div>
   </div>
 
@@ -145,23 +154,25 @@
   </div>
 
   <script>
-    const DAY_KEY = 'selectedDays';
-    const TYPE_KEY = 'selectedTypes';
+    const DAY_KEY   = 'selectedDays';
+    const TYPE_KEY  = 'selectedTypes';
     const WEEKS_KEY = 'weeksAhead';
+    const START_KEY = 'customStartDate'; // YYYY-MM-DD
+    const END_KEY   = 'customEndDate';   // YYYY-MM-DD
+
     const DAY_LABELS = {0:'일',1:'월',2:'화',3:'수',4:'목',5:'금',6:'토'}; // Date.getDay()
     const PYWDAY_LABELS = {4:'금요일',5:'토요일',6:'일요일'};            // Python weekday() 값용 표기
 
-    function formatDisplayDate(dateStr) {
-      // YYYYMMDD -> YYYY-MM-DD (요일)
-      const y = Number(dateStr.slice(0,4));
-      const m = Number(dateStr.slice(4,6));
-      const d = Number(dateStr.slice(6,8));
+    function formatDisplayDate(yyyymmdd) {
+      const y = Number(yyyymmdd.slice(0,4));
+      const m = Number(yyyymmdd.slice(4,6));
+      const d = Number(yyyymmdd.slice(6,8));
       const dt = new Date(y, m - 1, d);
       const week = DAY_LABELS[dt.getDay()];
       return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')} (${week})`;
     }
 
-    // 저장/복원
+    // 저장/복원 (요일)
     function getSelectedDays() {
       const raw = localStorage.getItem(DAY_KEY);
       if (raw) {
@@ -170,12 +181,13 @@
           if (Array.isArray(arr) && arr.length) return arr.map(Number);
         } catch {}
       }
-      return [5]; // 기본값: 토요일
+      return [5]; // 기본: 토요일
     }
     function setSelectedDays(days) {
       localStorage.setItem(DAY_KEY, JSON.stringify(days.map(Number)));
     }
 
+    // 저장/복원 (시설)
     function getSelectedTypes() {
       const raw = localStorage.getItem(TYPE_KEY);
       if (raw) {
@@ -184,56 +196,90 @@
           if (Array.isArray(arr) && arr.length) return arr;
         } catch {}
       }
-      return ["특화야영장", "카라반"]; // 기본값: 둘 다
+      return ["특화야영장", "카라반"];
     }
     function setSelectedTypes(types) {
       localStorage.setItem(TYPE_KEY, JSON.stringify(types));
     }
 
+    // 저장/복원 (주수)
     function getWeeksAhead() {
       const raw = localStorage.getItem(WEEKS_KEY);
       const v = Number(raw);
       if (Number.isInteger(v) && v >= 1 && v <= 10) return v;
-      return 8; // 기본값: 8주
+      return 8;
     }
     function setWeeksAhead(v) {
       localStorage.setItem(WEEKS_KEY, String(v));
     }
 
-    function applySelectionsToUI(days, types, weeks) {
+    // 저장/복원 (추가 날짜 범위)
+    function getStartDate() {
+      const s = localStorage.getItem(START_KEY) || '';
+      return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : '';
+    }
+    function setStartDate(v) {
+      if (v && /^\d{4}-\d{2}-\d{2}$/.test(v)) localStorage.setItem(START_KEY, v);
+      else localStorage.removeItem(START_KEY);
+    }
+    function getEndDate() {
+      const s = localStorage.getItem(END_KEY) || '';
+      return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : '';
+    }
+    function setEndDate(v) {
+      if (v && /^\d{4}-\d{2}-\d{2}$/.test(v)) localStorage.setItem(END_KEY, v);
+      else localStorage.removeItem(END_KEY);
+    }
+
+    function applySelectionsToUI(days, types, weeks, startDate, endDate) {
       document.querySelectorAll('.day-check').forEach(cb => {
         cb.checked = days.includes(Number(cb.value));
       });
       document.querySelectorAll('.type-check').forEach(cb => {
         cb.checked = types.includes(cb.value);
       });
-      const sel = document.getElementById('weeks-select');
-      sel.value = String(weeks);
+      document.getElementById('weeks-select').value = String(weeks);
 
-      const labelDays = (days.length ? days.map(d => PYWDAY_LABELS[d]).join(', ') : '없음');
+      document.getElementById('start-date').value = startDate || '';
+      document.getElementById('end-date').value   = endDate || '';
+
+      const labelDays  = (days.length ? days.map(d => PYWDAY_LABELS[d]).join(', ') : '없음');
       const labelTypes = (types.length ? types.join(', ') : '없음');
-      document.getElementById('selected-label').textContent =
-        `선택한 요일: ${labelDays} / 선택한 시설: ${labelTypes} / 조회 범위: ${weeks}주`;
+      let labelText = `선택한 요일: ${labelDays} / 선택한 시설: ${labelTypes} / 조회 범위: ${weeks}주`;
+      if (startDate && endDate) {
+        labelText += ` / 추가 기간: ${startDate} ~ ${endDate} (합집합)`;
+      }
+      document.getElementById('selected-label').textContent = labelText;
     }
 
-    function buildQueryParams(days, types, weeks) {
-      const dayParam = (days.length ? days.join(',') : '5'); // 비었으면 토요일
-      const typeParam = (types.length ? types.join(',') : '특화야영장,카라반');
+    // ✅ 항상 days/weeks/types는 보내고, start/end는 ‘있으면 추가’로 붙임
+    function buildQueryParams(days, types, weeks, startDate, endDate) {
+      const dayParam   = (days.length ? days.join(',') : '5');
+      const typeParam  = (types.length ? types.join(',') : '특화야영장,카라반');
       const weeksParam = (Number.isInteger(weeks) && weeks >= 1 && weeks <= 10) ? weeks : 8;
-      return `?days=${encodeURIComponent(dayParam)}&types=${encodeURIComponent(typeParam)}&weeks=${weeksParam}`;
+
+      let qs = `?days=${encodeURIComponent(dayParam)}&types=${encodeURIComponent(typeParam)}&weeks=${weeksParam}`;
+      if (startDate && endDate) {
+        qs += `&start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`;
+      }
+      return qs;
     }
 
     async function fetchAndRender() {
-      const days = getSelectedDays();
-      const types = getSelectedTypes();
-      const weeks = getWeeksAhead();
-      applySelectionsToUI(days, types, weeks);
+      const days      = getSelectedDays();
+      const types     = getSelectedTypes();
+      const weeks     = getWeeksAhead();
+      const startDate = getStartDate();
+      const endDate   = getEndDate();
+
+      applySelectionsToUI(days, types, weeks, startDate, endDate);
 
       const list = document.getElementById('list');
       list.innerHTML = '<h2>불러오는 중...</h2>';
 
       try {
-        const res = await fetch(`/api/reservations${buildQueryParams(days, types, weeks)}`);
+        const qs = buildQueryParams(days, types, weeks, startDate, endDate);
+        const res = await fetch(`/api/reservations${qs}`);
         const data = await res.json();
 
         list.innerHTML = '';
@@ -275,29 +321,29 @@
 
     // 초기화
     document.addEventListener('DOMContentLoaded', () => {
-      // 체크박스 이벤트(요일)
+      // 요일 체크
       document.querySelectorAll('.day-check').forEach(cb => {
         cb.addEventListener('change', () => {
           const selected = Array.from(document.querySelectorAll('.day-check'))
             .filter(x => x.checked)
             .map(x => Number(x.value));
-          setSelectedDays(selected.length ? selected : [5]); // 빈 선택 → 토요일 기본
+          setSelectedDays(selected.length ? selected : [5]);
           fetchAndRender();
         });
       });
 
-      // 체크박스 이벤트(시설)
+      // 시설 체크
       document.querySelectorAll('.type-check').forEach(cb => {
         cb.addEventListener('change', () => {
           const selected = Array.from(document.querySelectorAll('.type-check'))
             .filter(x => x.checked)
             .map(x => x.value);
-          setSelectedTypes(selected.length ? selected : ["특화야영장", "카라반"]); // 빈 선택 → 둘 다
+          setSelectedTypes(selected.length ? selected : ["특화야영장", "카라반"]);
           fetchAndRender();
         });
       });
 
-      // 주수 선택 드롭다운
+      // 주수 선택
       document.getElementById('weeks-select').addEventListener('change', (e) => {
         const v = Number(e.target.value);
         const weeks = (Number.isInteger(v) && v >= 1 && v <= 10) ? v : 8;
@@ -305,13 +351,34 @@
         fetchAndRender();
       });
 
-      // 데이터 새로고침 버튼
-      document.getElementById('btn-refresh').addEventListener('click', () => {
+      // 날짜 입력
+      const startInput = document.getElementById('start-date');
+      const endInput   = document.getElementById('end-date');
+
+      startInput.addEventListener('change', () => {
+        const v = startInput.value;
+        setStartDate(v);
+        const endVal = endInput.value;
+        if (endVal && v && endVal < v) {
+          endInput.value = '';
+          setEndDate('');
+        }
         fetchAndRender();
       });
 
-      // 저장된 선택 반영 & 최초 로드
-      applySelectionsToUI(getSelectedDays(), getSelectedTypes(), getWeeksAhead());
+      endInput.addEventListener('change', () => {
+        const v = endInput.value;
+        setEndDate(v);
+        const startVal = startInput.value;
+        if (startVal && v && startVal > v) {
+          startInput.value = '';
+          setStartDate('');
+        }
+        fetchAndRender();
+      });
+
+      // 최초 로드
+      applySelectionsToUI(getSelectedDays(), getSelectedTypes(), getWeeksAhead(), getStartDate(), getEndDate());
       fetchAndRender();
     });
   </script>
