@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <title>예약 가능한 특화야영장/카라반</title>
+  <title>예약 가능한 특화야영장/카라반/자동차야영장</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
   <style>
     :root {
@@ -95,7 +95,7 @@
   </style>
 </head>
 <body>
-  <h1>예약 가능한 특화야영장/카라반</h1>
+  <h1>예약 가능한 특화야영장/카라반/자동차야영장</h1>
 
   <div class="controls">
     <div class="check-wrap">
@@ -110,6 +110,7 @@
       <div class="check-group" id="types-group">
         <label class="check"><input type="checkbox" class="type-check" value="특화야영장" /><span>특화야영장</span></label>
         <label class="check"><input type="checkbox" class="type-check" value="카라반" /><span>카라반</span></label>
+        <label class="check"><input type="checkbox" class="type-check" value="자동차야영장" /><span>자동차야영장</span></label>
       </div>
 
       <div class="row">
@@ -176,6 +177,10 @@
       localStorage.setItem(DAY_KEY, JSON.stringify(days.map(Number)));
     }
 
+    function defaultTypes() {
+      return ["특화야영장", "카라반", "자동차야영장"];
+    }
+
     function getSelectedTypes() {
       const raw = localStorage.getItem(TYPE_KEY);
       if (raw) {
@@ -184,7 +189,7 @@
           if (Array.isArray(arr) && arr.length) return arr;
         } catch {}
       }
-      return ["특화야영장", "카라반"]; // 기본값: 둘 다
+      return defaultTypes(); // 기본값: 세 가지 모두
     }
     function setSelectedTypes(types) {
       localStorage.setItem(TYPE_KEY, JSON.stringify(types));
@@ -218,7 +223,7 @@
 
     function buildQueryParams(days, types, weeks) {
       const dayParam = (days.length ? days.join(',') : '5'); // 비었으면 토요일
-      const typeParam = (types.length ? types.join(',') : '특화야영장,카라반');
+      const typeParam = (types.length ? types.join(',') : defaultTypes().join(','));
       const weeksParam = (Number.isInteger(weeks) && weeks >= 1 && weeks <= 10) ? weeks : 8;
       return `?days=${encodeURIComponent(dayParam)}&types=${encodeURIComponent(typeParam)}&weeks=${weeksParam}`;
     }
@@ -292,7 +297,7 @@
           const selected = Array.from(document.querySelectorAll('.type-check'))
             .filter(x => x.checked)
             .map(x => x.value);
-          setSelectedTypes(selected.length ? selected : ["특화야영장", "카라반"]); // 빈 선택 → 둘 다
+          setSelectedTypes(selected.length ? selected : defaultTypes()); // 빈 선택 → 세 가지 모두
           fetchAndRender();
         });
       });

@@ -32,11 +32,12 @@ def reservations():
     if not selected_days:
         selected_days = {5}
 
-    # ✅ 시설 파라미터: 기본값 둘 다
-    raw_types = request.args.get("types", "특화야영장,카라반")
+    # ✅ 시설 파라미터: 기본값 세 가지 모두
+    default_types = {"특화야영장", "카라반", "자동차야영장"}
+    raw_types = request.args.get("types", ",".join(default_types))
     selected_types = {x.strip() for x in raw_types.split(",") if x.strip()}
     if not selected_types:
-        selected_types = {"특화야영장", "카라반"}
+        selected_types = set(default_types)
 
     # ✅ 조회 대상 날짜 구성
     target_dates = [
