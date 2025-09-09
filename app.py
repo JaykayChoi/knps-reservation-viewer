@@ -9,20 +9,31 @@ app = Flask(__name__)
 def home():
     return render_template("index.html")
 
+def _parse_date(s: str):
+    """YYYY-MM-DD 또는 YYYY.MM.DD 허용. 잘못되면 None."""
+    if not s:
+        return None
+    for fmt in ("%Y-%m-%d", "%Y.%m.%d"):
+        try:
+            return datetime.datetime.strptime(s.strip(), fmt).date()
+        except Exception:
+            pass
+    return None
+
 @app.route("/api/reservations")
 def reservations():
     today = datetime.date.today()
-    # ✅ set을 사용하여 중복 날짜를 자동으로 처리
-    all_target_dates = set()
 
-    # --- [A] n주 이내의 선택된 요일 검색 ---
+    # ✅ 주수 파라미터 (1~10), 기본 8주
     try:
         weeks = int(request.args.get("weeks", "8"))
     except Exception:
         weeks = 8
     if weeks < 1 or weeks > 10:
         weeks = 8
-    
+    total_days = weeks * 7
+
+    # ✅ 요일 파라미터: Python weekday() 기준 (월=0 ... 일=6). 기본값: 토요일(5)
     raw_days = request.args.get("days", "5")
     try:
         selected_days = {int(x) for x in raw_days.split(",") if x != ""}
@@ -32,61 +43,72 @@ def reservations():
     if not selected_days:
         selected_days = {5}
 
-    total_days = weeks * 7
-    for i in range(total_days):
-        day = today + datetime.timedelta(days=i)
-        if day.weekday() in selected_days:
-            all_target_dates.add(day.strftime("%Y%m%d"))
-    
-    print(f"[API] 주/요일 조건 검색 완료. 현재 {len(all_target_dates)}개 날짜")
-
-    # --- [B] 지정된 기간 내의 모든 날짜 검색 ---
-    start_date_str = request.args.get("start_date")
-    end_date_str = request.args.get("end_date")
-    if start_date_str and end_date_str:
-        try:
-            start_date = datetime.datetime.strptime(start_date_str, "%Y-%m-%d").date()
-            end_date = datetime.datetime.strptime(end_date_str, "%Y-%m-%d").date()
-            delta = end_date - start_date
-            for i in range(delta.days + 1):
-                day = start_date + datetime.timedelta(days=i)
-                all_target_dates.add(day.strftime("%Y%m%d"))
-            print(f"[API] 기간 조건 추가 완료. 현재 {len(all_target_dates)}개 날짜")
-        except Exception as e:
-            print(f"[API] 날짜 파싱 오류: {e}")
-
-    # ✅ 합쳐진 날짜 목록을 정렬하여 최종 조회 대상으로 확정
-    target_dates = sorted(list(all_target_dates))
-    print(f"[API] 통합 조회 시작. 최종 조회일자수={len(target_dates)}")
-
-    # 시설 파라미터 (공통)
+    # ✅ 시설 파라미터: 기본값 둘 다
     raw_types = request.args.get("types", "특화야영장,카라반")
     selected_types = {x.strip() for x in raw_types.split(",") if x.strip()}
     if not selected_types:
         selected_types = {"특화야영장", "카라반"}
 
-    # 이하 API 호출 로직은 동일
+    # ✅ 날짜 범위 파라미터 (있으면 ‘추가로’ 포함; 요일/주수와 합집합)
+    start_str = (request.args.get("start_date") or "").strip()
+    end_str   = (request.args.get("end_date") or "").strip()
+    start_date = _parse_date(start_str)
+    end_date   = _parse_date(end_str)
+
+    # ✅ 요일 기반 후보 (오늘부터 weeks*7일 중 선택 요일만)
+    weekday_dates = [
+        (today + datetime.timedelta(days=i)).strftime("%Y%m%d")
+        for i in range(total_days)
+        if (today + datetime.timedelta(days=i)).weekday() in selected_days
+    ]
+
+    # ✅ 날짜 범위 후보 (양 끝 포함, 과도 방지를 위해 최대 120일)
+    range_dates = []
+    if start_date and end_date and start_date <= end_date:
+        max_span = 120
+        span = (end_date - start_date).days + 1
+        if span > max_span:
+            end_date = start_date + datetime.timedelta(days=max_span - 1)
+            span = max_span
+        range_dates = [
+            (start_date + datetime.timedelta(days=i)).strftime("%Y%m%d")
+            for i in range(span)
+        ]
+
+    # ✅ 최종 타깃: 합집합(중복 제거)
+    target_dates = sorted(set(weekday_dates) | set(range_dates))
+
+    print(
+        f"[API] 주수={weeks}, 요일={sorted(selected_days)}, 시설={sorted(selected_types)} "
+        f"/ 날짜범위={start_date}~{end_date} / (요일 {len(weekday_dates)} + 범위 {len(range_dates)}) "
+        f"→ 조회일자수={len(target_dates)}"
+    )
+
     filtered_results = []
+
     for date in target_dates:
         try:
             url = "https://reservation.knps.or.kr/reservation/selectCampRemainSiteList.do"
             data = {"prd_sal_ymd": date, "park": ""}
             headers = {
                 "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-                "X-Requested-With": "XMLHttpRequest",
+                "X-Requested-With": "XMLHttpRequest"
             }
+
             resp = requests.post(url, data=data, headers=headers, timeout=10)
             resp.raise_for_status()
             result = resp.json()
+
             filtered = [
                 {**item, "query_date": date}
                 for item in result.get("list", [])
                 if item.get("prdCtgNm") in selected_types
                 and (item.get("cntN") or 0) > 0
-                and item.get("officeNm")
-                not in ("북한산", "한려해상", "다도해해상", "지리산경남", "무등산동부")
+                and item.get("officeNm") not in ("북한산", "한려해상", "다도해해상", "지리산경남", "무등산동부")
             ]
+
             filtered_results.extend(filtered)
+
         except Exception as e:
             print(f"[{date}] 호출 실패: {e}")
 
