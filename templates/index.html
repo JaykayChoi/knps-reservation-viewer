@@ -162,8 +162,8 @@
     const START_KEY = 'customStartDate'; // YYYY-MM-DD
     const END_KEY   = 'customEndDate';   // YYYY-MM-DD
 
-    const DAY_LABELS = {0:'일',1:'월',2:'화',3:'수',4:'목',5:'금',6:'토'}; // Date.getDay()
-    const PYWDAY_LABELS = {4:'금요일',5:'토요일',6:'일요일'};            // Python weekday() 값용 표기
+    const DAY_LABELS = {0:'일',1:'월',2:'화',3:'수',4:'목',5:'금',6:'토'};
+    const PYWDAY_LABELS = {4:'금요일',5:'토요일',6:'일요일'};
 
     function formatDisplayDate(yyyymmdd) {
       const y = Number(yyyymmdd.slice(0,4));
@@ -174,49 +174,49 @@
       return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')} (${week})`;
     }
 
-    // 저장/복원 (요일)
+    // ----- 저장/복원 (요일) - 레거시 CSV도 허용 -----
     function getSelectedDays() {
       const raw = localStorage.getItem(DAY_KEY);
-      if (raw) {
-        try {
-          const arr = JSON.parse(raw);
-          if (Array.isArray(arr) && arr.length) return arr.map(Number);
-        } catch {}
-      }
-      return [5]; // 기본: 토요일
+      if (!raw) return [5];
+      try {
+        const val = JSON.parse(raw);
+        if (Array.isArray(val) && val.length) return val.map(Number);
+      } catch { /* ignore */ }
+      // 레거시: "4,5,6" 같은 문자열 저장값
+      const csv = String(raw).split(',').map(s=>s.trim()).filter(Boolean).map(Number);
+      return csv.length ? csv : [5];
     }
     function setSelectedDays(days) {
       localStorage.setItem(DAY_KEY, JSON.stringify(days.map(Number)));
     }
 
-    // 저장/복원 (시설)
+    // ----- 저장/복원 (시설) - 레거시 CSV도 허용 -----
     function getSelectedTypes() {
       const raw = localStorage.getItem(TYPE_KEY);
-      if (raw) {
-        try {
-          const arr = JSON.parse(raw);
-          if (Array.isArray(arr) && arr.length) return arr;
-        } catch {}
-      }
-      // ✅ 기본값: 세 가지 다 선택
-      return ["특화야영장", "카라반", "자동차야영장"];
+      if (!raw) return ["특화야영장","카라반","자동차야영장"];
+      try {
+        const val = JSON.parse(raw);
+        if (Array.isArray(val) && val.length) return val;
+      } catch { /* ignore */ }
+      // 레거시: "특화야영장,카라반" 같은 문자열 저장값
+      const csv = String(raw).split(',').map(s=>s.trim()).filter(Boolean);
+      return csv.length ? csv : ["특화야영장","카라반","자동차야영장"];
     }
     function setSelectedTypes(types) {
       localStorage.setItem(TYPE_KEY, JSON.stringify(types));
     }
 
-    // 저장/복원 (주수)
+    // ----- 저장/복원 (주수) -----
     function getWeeksAhead() {
       const raw = localStorage.getItem(WEEKS_KEY);
       const v = Number(raw);
-      if (Number.isInteger(v) && v >= 1 && v <= 10) return v;
-      return 8;
+      return (Number.isInteger(v) && v>=1 && v<=10) ? v : 8;
     }
     function setWeeksAhead(v) {
       localStorage.setItem(WEEKS_KEY, String(v));
     }
 
-    // 저장/복원 (추가 날짜 범위)
+    // ----- 저장/복원 (날짜범위) -----
     function getStartDate() {
       const s = localStorage.getItem(START_KEY) || '';
       return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : '';
@@ -239,7 +239,8 @@
         cb.checked = days.includes(Number(cb.value));
       });
       document.querySelectorAll('.type-check').forEach(cb => {
-        cb.checked = types.includes(cb.value));
+        // ✅ 버그 수정: 여분의 ')' 제거
+        cb.checked = types.includes(cb.value);
       });
       document.getElementById('weeks-select').value = String(weeks);
 
@@ -258,9 +259,8 @@
     // ✅ 항상 days/weeks/types는 보내고, start/end는 ‘있으면 추가’로 붙임
     function buildQueryParams(days, types, weeks, startDate, endDate) {
       const dayParam   = (days.length ? days.join(',') : '5');
-      // ✅ 기본 문자열에도 자동차야영장 포함
       const typeParam  = (types.length ? types.join(',') : '특화야영장,카라반,자동차야영장');
-      const weeksParam = (Number.isInteger(weeks) && weeks >= 1 && weeks <= 10) ? weeks : 8;
+      const weeksParam = (Number.isInteger(weeks) && weeks>=1 && weeks<=10) ? weeks : 8;
 
       let qs = `?days=${encodeURIComponent(dayParam)}&types=${encodeURIComponent(typeParam)}&weeks=${weeksParam}`;
       if (startDate && endDate) {
@@ -342,7 +342,7 @@
           const selected = Array.from(document.querySelectorAll('.type-check'))
             .filter(x => x.checked)
             .map(x => x.value);
-          setSelectedTypes(selected.length ? selected : ["특화야영장", "카라반", "자동차야영장"]);
+          setSelectedTypes(selected.length ? selected : ["특화야영장","카라반","자동차야영장"]);
           fetchAndRender();
         });
       });
@@ -381,7 +381,7 @@
         fetchAndRender();
       });
 
-      // 최초 로드
+      // 저장된 선택 반영 & 최초 로드
       applySelectionsToUI(getSelectedDays(), getSelectedTypes(), getWeeksAhead(), getStartDate(), getEndDate());
       fetchAndRender();
     });

@@ -85,7 +85,6 @@ def reservations():
     )
 
     filtered_results = []
-
     for date in target_dates:
         try:
             url = "https://reservation.knps.or.kr/reservation/selectCampRemainSiteList.do"
@@ -94,7 +93,6 @@ def reservations():
                 "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
                 "X-Requested-With": "XMLHttpRequest"
             }
-
             resp = requests.post(url, data=data, headers=headers, timeout=10)
             resp.raise_for_status()
             result = resp.json()
@@ -106,7 +104,6 @@ def reservations():
                 and (item.get("cntN") or 0) > 0
                 and item.get("officeNm") not in ("북한산", "한려해상", "다도해해상", "지리산경남", "무등산동부")
             ]
-
             filtered_results.extend(filtered)
 
         except Exception as e:
